@@ -36,36 +36,20 @@ import {
   Crown,
   ChevronRight,
   Info,
-  Database
+  Database,
+  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
 
 export default function App() {
-  // Load initial states from localStorage with safe initialData fallbacks
-  const [players, setPlayers] = useState<Player[]>(() => {
-    const stored = localStorage.getItem('cricket_players');
-    return stored ? JSON.parse(stored) : INITIAL_PLAYERS;
-  });
-
-  const [expenses, setExpenses] = useState<Expense[]>(() => {
-    const stored = localStorage.getItem('cricket_expenses');
-    return stored ? JSON.parse(stored) : INITIAL_EXPENSES;
-  });
-
-  const [paymentLogs, setPaymentLogs] = useState<PaymentLog[]>(() => {
-    const stored = localStorage.getItem('cricket_payment_logs');
-    return stored ? JSON.parse(stored) : INITIAL_PAYMENT_LOGS;
-  });
-
-  const [matches, setMatches] = useState<Match[]>(() => {
-    const stored = localStorage.getItem('cricket_matches');
-    return stored ? JSON.parse(stored) : INITIAL_MATCHES;
-  });
-
-  const [tournaments, setTournaments] = useState<Tournament[]>(() => {
-    const stored = localStorage.getItem('cricket_tournaments');
-    return stored ? JSON.parse(stored) : INITIAL_TOURNAMENTS;
-  });
+  // Direct firestore real-time state streams instead of local mocks
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [paymentLogs, setPaymentLogs] = useState<PaymentLog[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
 
   // Current session authenticated customer context
   const [currentUser, setCurrentUser] = useState<Player | null>(() => {
@@ -86,9 +70,16 @@ export default function App() {
     return localStorage.getItem('cricket_custom_ball_duty_id');
   });
 
-  // Inputs state for login screen
-  const [loginName, setLoginName] = useState('');
-  const [loginMobile, setLoginMobile] = useState('');
+  // SQUAD PORTAL ENTRANCE STATES
+  const [playerFirstName, setPlayerFirstName] = useState('');
+  const [playerLastName, setPlayerLastName] = useState('');
+  const [playerRole, setPlayerRole] = useState('Batsman');
+  const [playerMobile, setPlayerMobile] = useState('');
+
+  // SECURE CHAIRMAN (MANO) ADMIN ENTRANCE STATES
+  const [adminFirstName, setAdminFirstName] = useState('Mano');
+  const [adminMobile, setAdminMobile] = useState('');
+
   const [errorMsg, setErrorMsg] = useState('');
   const [showDemoLogins, setShowDemoLogins] = useState(false);
 
@@ -99,26 +90,75 @@ export default function App() {
   // Active Navigation Tab
   const [activeTab, setActiveTab2] = useState<'FINANCES' | 'MATCHES' | 'ROSTER' | 'SCOREBOARD' | 'TOURNAMENTS'>('FINANCES');
 
-  // Push updates to localStorage whenever state mutations occur
+  // REALTIME FIRESTORE SYNCHRONIZATION LISTENERS
   useEffect(() => {
-    localStorage.setItem('cricket_players', JSON.stringify(players));
-  }, [players]);
+    const unsubscribe = onSnapshot(collection(db, 'players'), (snapshot) => {
+      const list: Player[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as Player);
+      });
+      setPlayers(list);
+    }, (error) => {
+      console.error("Firestore error listening to players registration: ", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('cricket_expenses', JSON.stringify(expenses));
-  }, [expenses]);
+    const unsubscribe = onSnapshot(collection(db, 'expenses'), (snapshot) => {
+      const list: Expense[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as Expense);
+      });
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      setExpenses(list);
+    }, (error) => {
+      console.error("Firestore error listening to expenses: ", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('cricket_payment_logs', JSON.stringify(paymentLogs));
-  }, [paymentLogs]);
+    const unsubscribe = onSnapshot(collection(db, 'payment_logs'), (snapshot) => {
+      const list: PaymentLog[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as PaymentLog);
+      });
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      setPaymentLogs(list);
+    }, (error) => {
+      console.error("Firestore error listening to payment logs: ", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('cricket_matches', JSON.stringify(matches));
-  }, [matches]);
+    const unsubscribe = onSnapshot(collection(db, 'matches'), (snapshot) => {
+      const list: Match[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as Match);
+      });
+      list.sort((a, b) => b.date.localeCompare(a.date));
+      setMatches(list);
+    }, (error) => {
+      console.error("Firestore error listening to matches: ", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('cricket_tournaments', JSON.stringify(tournaments));
-  }, [tournaments]);
+    const unsubscribe = onSnapshot(collection(db, 'tournaments'), (snapshot) => {
+      const list: Tournament[] = [];
+      snapshot.forEach((doc) => {
+        list.push(doc.data() as Tournament);
+      });
+      list.sort((a, b) => b.startDate.localeCompare(a.startDate));
+      setTournaments(list);
+    }, (error) => {
+      console.error("Firestore error listening to tournaments: ", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (customBallDutyId) {
@@ -130,219 +170,284 @@ export default function App() {
 
   // FINANCIAL MUTATIONS
   // Log expense purchased product
-  const handleAddExpense = (newExpense: Omit<Expense, 'id'>) => {
+  const handleAddExpense = async (newExpense: Omit<Expense, 'id'>) => {
+    const id = `expense_${Date.now()}`;
     const expense: Expense = {
       ...newExpense,
-      id: `expense_${Date.now()}`
+      id
     };
-    setExpenses(prev => [expense, ...prev]);
+    try {
+      await setDoc(doc(db, 'expenses', id), expense);
+    } catch (e) {
+      console.error("Error adding expense:", e);
+    }
   };
 
   // Delete wrong/accidental expense
-  const handleDeleteExpense = (id: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== id));
+  const handleDeleteExpense = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'expenses', id));
+    } catch (e) {
+      console.error("Error deleting expense:", e);
+    }
   };
 
   // Record a payment / fee collection contribution
-  const handleAddContribution = (playerId: string, amount: number, date: string, notes?: string) => {
+  const handleAddContribution = async (playerId: string, amount: number, date: string, notes?: string) => {
     const targetPlayer = players.find(p => p.id === playerId);
     if (!targetPlayer) return;
 
-    // Create payment history entry
+    const logId = `log_${Date.now()}`;
     const newLog: PaymentLog = {
-      id: `log_${Date.now()}`,
+      id: logId,
       playerId,
       playerName: targetPlayer.name,
       amount,
       date,
-      notes
+      notes: notes || ''
     };
 
-    // Update Logs and individual player total collections
-    setPaymentLogs(prev => [...prev, newLog]);
-    setPlayers(prev => prev.map(p => {
-      if (p.id === playerId) {
-        return {
-          ...p,
-          totalCollected: p.totalCollected + amount
-        };
-      }
-      return p;
-    }));
+    try {
+      await setDoc(doc(db, 'payment_logs', logId), newLog);
+      await updateDoc(doc(db, 'players', playerId), {
+        totalCollected: (targetPlayer.totalCollected || 0) + amount
+      });
+    } catch (e) {
+      console.error("Error recording contribution:", e);
+    }
   };
 
   // MATCH STATS & POLL MUTATIONS
   // Create fixture event
-  const handleAddMatch = (newMatch: Omit<Match, 'id' | 'poll'>) => {
+  const handleAddMatch = async (newMatch: Omit<Match, 'id' | 'poll'>) => {
+    const id = `match_${Date.now()}`;
     const match: Match = {
       ...newMatch,
-      id: `match_${Date.now()}`,
-      poll: {} // Starts empty, players are undecided
+      id,
+      poll: {}
     };
-    setMatches(prev => [match, ...prev]);
+    try {
+      await setDoc(doc(db, 'matches', id), match);
+    } catch (e) {
+      console.error("Error creating match:", e);
+    }
   };
 
   // Update a single player's RSVP response
-  const handleUpdatePoll = (matchId: string, playerId: string, status: AvailabilityStatus) => {
-    setMatches(prev => prev.map(m => {
-      if (m.id === matchId) {
-        return {
-          ...m,
-          poll: {
-            ...m.poll,
-            [playerId]: status
-          }
-        };
-      }
-      return m;
-    }));
+  const handleUpdatePoll = async (matchId: string, playerId: string, status: AvailabilityStatus) => {
+    try {
+      await updateDoc(doc(db, 'matches', matchId), {
+        [`poll.${playerId}`]: status
+      });
+    } catch (e) {
+      console.error("Error updating match poll response:", e);
+    }
   };
 
   // Reset poll to blank undecided
-  const handleClearPoll = (matchId: string) => {
-    setMatches(prev => prev.map(m => {
-      if (m.id === matchId) {
-        return {
-          ...m,
-          poll: {}
-        };
-      }
-      return m;
-    }));
+  const handleClearPoll = async (matchId: string) => {
+    try {
+      await updateDoc(doc(db, 'matches', matchId), {
+        poll: {}
+      });
+    } catch (e) {
+      console.error("Error clearing match poll:", e);
+    }
   };
 
   // Cancel upcoming game match row
-  const handleDeleteMatch = (id: string) => {
-    setMatches(prev => prev.filter(m => m.id !== id));
+  const handleDeleteMatch = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'matches', id));
+    } catch (e) {
+      console.error("Error cancelling match:", e);
+    }
   };
 
   // SCORECARD MUTATIONS
-  const handleUpdateMatchScorecard = (matchId: string, scorecard: MatchScorecard) => {
-    setMatches(prev => prev.map(m => {
-      if (m.id === matchId) {
-        return {
-          ...m,
-          scorecard
-        };
-      }
-      return m;
-    }));
+  const handleUpdateMatchScorecard = async (matchId: string, scorecard: MatchScorecard) => {
+    try {
+      await updateDoc(doc(db, 'matches', matchId), {
+        scorecard
+      });
+    } catch (e) {
+      console.error("Error updating match stats scorecard:", e);
+    }
   };
 
   // ROSTER SQUAD MUTATIONS
-  // Add new player to registration board
-  const handleAddPlayer = (newPlayer: Omit<Player, 'id' | 'totalCollected'>) => {
+  // Add new player to registration board (Sign up can also trigger this)
+  const handleAddPlayer = async (newPlayer: Omit<Player, 'id' | 'totalCollected'>) => {
+    const id = `p_${Date.now()}`;
     const player: Player = {
       ...newPlayer,
-      id: `p_${Date.now()}`,
+      id,
       totalCollected: 0
     };
-    setPlayers(prev => [...prev, player]);
+    try {
+      await setDoc(doc(db, 'players', id), player);
+    } catch (e) {
+      console.error("Error adding squad player:", e);
+    }
   };
 
   // Modify user name or jersey assignment
-  const handleUpdatePlayer = (id: string, updatedFields: Partial<Omit<Player, 'id' | 'totalCollected'>>) => {
-    setPlayers(prev => prev.map(p => {
-      if (p.id === id) {
-        return {
-          ...p,
-          ...updatedFields
-        };
-      }
-      return p;
-    }));
+  const handleUpdatePlayer = async (id: string, updatedFields: Partial<Omit<Player, 'id' | 'totalCollected'>>) => {
+    try {
+      await updateDoc(doc(db, 'players', id), updatedFields);
+    } catch (e) {
+      console.error("Error updating squad player profile:", e);
+    }
   };
 
   // Delete squad member entirely
-  const handleDeletePlayer = (id: string) => {
-    setPlayers(prev => prev.filter(p => p.id !== id));
-    // Clean up payments logs referring to deleted player
-    setPaymentLogs(prev => prev.filter(log => log.playerId !== id));
-    // Clean up matches polls
-    setMatches(prev => prev.map(m => {
-      const copyPoll = { ...m.poll };
-      delete copyPoll[id];
-      return {
-        ...m,
-        poll: copyPoll
-      };
-    }));
+  const handleDeletePlayer = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'players', id));
+    } catch (e) {
+      console.error("Error removing squad player:", e);
+    }
   };
 
   // Reset whole storage to original preseeds
-  const resetToFactoryDefault = () => {
-    if (confirm("Reset everything to factory default? This wipes customized names, expenses logs, and responses.")) {
-      localStorage.removeItem('cricket_players');
-      localStorage.removeItem('cricket_expenses');
-      localStorage.removeItem('cricket_payment_logs');
-      localStorage.removeItem('cricket_matches');
-      localStorage.removeItem('cricket_custom_ball_duty_id');
-      setPlayers(INITIAL_PLAYERS);
-      setExpenses(INITIAL_EXPENSES);
-      setPaymentLogs(INITIAL_PAYMENT_LOGS);
-      setMatches(INITIAL_MATCHES);
-      setCustomBallDutyId(null);
-      setActiveTab2('FINANCES');
+  const resetToFactoryDefault = async () => {
+    if (confirm("Reset everything in cloud database? This wipes customized names, expenses logs, and responses.")) {
+      try {
+        for (const p of players) {
+          await deleteDoc(doc(db, 'players', p.id));
+        }
+        for (const ex of expenses) {
+          await deleteDoc(doc(db, 'expenses', ex.id));
+        }
+        for (const l of paymentLogs) {
+          await deleteDoc(doc(db, 'payment_logs', l.id));
+        }
+        for (const m of matches) {
+          await deleteDoc(doc(db, 'matches', m.id));
+        }
+        for (const t of tournaments) {
+          await deleteDoc(doc(db, 'tournaments', t.id));
+        }
+        setCustomBallDutyId(null);
+        setActiveTab2('FINANCES');
+      } catch (err: any) {
+        console.error("Error resetting Cloud Firestore database:", err);
+      }
     }
   };
 
-  // Handle Submit on Login Screen
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Handle Player Register and Login submitting First Name, Last Name, Role, and Mobile Number
+  const handlePlayerRegisterAndLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!loginName || !loginMobile) {
-      setErrorMsg('First Name and Mobile Number are mandatory!');
+    const fName = playerFirstName.trim();
+    const lName = playerLastName.trim();
+    const role = playerRole;
+    const mobile = playerMobile.replace(/\s+/g, '').trim();
+
+    if (!fName || !lName || !mobile) {
+      setErrorMsg('First Name, Last Name, and Mobile Number are mandatory!');
       return;
     }
 
-    const cleanInputName = loginName.trim().toLowerCase();
-    const cleanInputMobile = loginMobile.replace(/\s+/g, '').trim();
+    if (mobile.length < 8) {
+      setErrorMsg('Please enter a valid mobile number (minimum 8 digits).');
+      return;
+    }
 
-    // Search players in roster
-    const matched = players.find(p => {
+    const fullName = `${fName} ${lName}`;
+
+    if (fName.toLowerCase() === 'mano' && mobile === '9566510045') {
+      setErrorMsg('Mano is the Admin! Please use the designated Admin Login section below.');
+      return;
+    }
+
+    // Lookup if player with this mobile exists in registered squad
+    const existingPlayer = players.find(p => {
       if (!p.mobileNumber) return false;
-      const cleanPlayerMobile = p.mobileNumber.replace(/\s+/g, '').trim();
-      if (cleanPlayerMobile !== cleanInputMobile) return false;
-
-      const pFirstName = p.name.split(' ')[0].toLowerCase().trim();
-      const pFullName = p.name.toLowerCase().trim();
-
-      return pFirstName === cleanInputName || pFullName === cleanInputName || pFullName.startsWith(cleanInputName);
+      const cleanP = p.mobileNumber.replace(/\s+/g, '').trim();
+      return cleanP === mobile;
     });
 
-    if (matched) {
-      setCurrentUser(matched);
-      localStorage.setItem('cricket_logged_user', JSON.stringify(matched));
-      setLoginName('');
-      setLoginMobile('');
+    if (existingPlayer) {
+      // Existing player signs in securely
+      setCurrentUser(existingPlayer);
+      localStorage.setItem('cricket_logged_user', JSON.stringify(existingPlayer));
+      
+      // Clear inputs
+      setPlayerFirstName('');
+      setPlayerLastName('');
+      setPlayerRole('Batsman');
+      setPlayerMobile('');
     } else {
-      // Direct administrative match check for "Mano" and "9566510045"
-      if (cleanInputName === 'mano' && cleanInputMobile === '9566510045') {
-        const manoAdmin: Player = {
-          id: 'p0',
-          name: 'Mano',
-          jerseyNumber: '7',
-          role: 'Club Chairman (Admin)',
-          totalCollected: 250,
-          mobileNumber: '9566510045'
-        };
-        // Add if not already present
+      // Create and register new player profile live
+      const playerId = `p_${Date.now()}`;
+      const newPlayer: Player = {
+        id: playerId,
+        name: fullName,
+        role: role,
+        totalCollected: 0,
+        mobileNumber: mobile
+      };
+
+      try {
+        await setDoc(doc(db, 'players', playerId), newPlayer);
+        setCurrentUser(newPlayer);
+        localStorage.setItem('cricket_logged_user', JSON.stringify(newPlayer));
+
+        // Clear inputs
+        setPlayerFirstName('');
+        setPlayerLastName('');
+        setPlayerRole('Batsman');
+        setPlayerMobile('');
+      } catch (err: any) {
+        setErrorMsg(`Failed to register and login player: ${err.message || err}`);
+      }
+    }
+  };
+
+  // Handle Admin Access Portal Specifically for Club Chairman Mano only
+  const handleAdminManoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    const cleanInputName = adminFirstName.trim().toLowerCase();
+    const cleanInputMobile = adminMobile.replace(/\s+/g, '').trim();
+
+    if (!cleanInputName || !cleanInputMobile) {
+      setErrorMsg('Both Admin First Name and mobile number are required!');
+      return;
+    }
+
+    if (cleanInputName === 'mano' && cleanInputMobile === '9566510045') {
+      const manoAdmin: Player = {
+        id: 'p0',
+        name: 'Mano',
+        jerseyNumber: '7',
+        role: 'Club Chairman (Admin)',
+        totalCollected: 250,
+        mobileNumber: '9566510045'
+      };
+
+      try {
         if (!players.some(p => p.mobileNumber === '9566510045')) {
-          setPlayers(prev => [manoAdmin, ...prev]);
+          await setDoc(doc(db, 'players', 'p0'), manoAdmin);
         }
         setCurrentUser(manoAdmin);
         localStorage.setItem('cricket_logged_user', JSON.stringify(manoAdmin));
-        setLoginName('');
-        setLoginMobile('');
-      } else {
-        setErrorMsg('Invalid login credentials! First Name and registered Mobile Number must match a squad profile.');
+        setAdminFirstName('Mano');
+        setAdminMobile('');
+      } catch (err: any) {
+        setErrorMsg(`Admin authorization failed: ${err.message || err}`);
       }
+    } else {
+      setErrorMsg('Invalid Admin Access! This panel is restricted strictly for Mano only.');
     }
   };
 
   // Database Import handler ("shar the database for me")
-  const handleImportDatabase = (e: React.FormEvent) => {
+  const handleImportDatabase = async (e: React.FormEvent) => {
     e.preventDefault();
     setDbStatus(null);
     if (!dbShareInput.trim()) return;
@@ -362,20 +467,48 @@ export default function App() {
         throw new Error("Payload missing 'matches' scheduled array.");
       }
 
-      setPlayers(parsed.players);
-      setExpenses(parsed.expenses);
-      setPaymentLogs(parsed.paymentLogs);
-      setMatches(parsed.matches);
+      setDbStatus({ type: 'success', msg: 'importing records to firestore...' });
+
+      // Save each to cloud database
+      for (const p of parsed.players) {
+        await setDoc(doc(db, 'players', p.id), p);
+      }
+      for (const ex of parsed.expenses) {
+        await setDoc(doc(db, 'expenses', ex.id), ex);
+      }
+      for (const log of parsed.paymentLogs) {
+        await setDoc(doc(db, 'payment_logs', log.id), log);
+      }
+      for (const m of parsed.matches) {
+        await setDoc(doc(db, 'matches', m.id), m);
+      }
       if (parsed.tournaments && Array.isArray(parsed.tournaments)) {
-        setTournaments(parsed.tournaments);
-      } else {
-        setTournaments([]);
+        for (const t of parsed.tournaments) {
+          await setDoc(doc(db, 'tournaments', t.id), t);
+        }
       }
       
       setDbShareInput('');
-      setDbStatus({ type: 'success', msg: 'JSON Database loaded successfully! Active cache synced.' });
+      setDbStatus({ type: 'success', msg: 'JSON Database successfully loaded and synced to Firestore!' });
     } catch (err: any) {
       setDbStatus({ type: 'error', msg: `Import aborted: ${err?.message || 'Invalid JSON format.'}` });
+    }
+  };
+
+  // Live Sync tournaments update mapping
+  const handleUpdateTournaments = async (updatedTournaments: Tournament[]) => {
+    try {
+      for (const t of updatedTournaments) {
+        await setDoc(doc(db, 'tournaments', t.id), t);
+      }
+      // If any tournament is deleted in the updated, wipe it from Cloud
+      const existingIds = updatedTournaments.map(t => t.id);
+      const deletedTournaments = tournaments.filter(t => !existingIds.includes(t.id));
+      for (const d of deletedTournaments) {
+        await deleteDoc(doc(db, 'tournaments', d.id));
+      }
+    } catch (e) {
+      console.error("Firestore error updating tournaments list: ", e);
     }
   };
 
@@ -468,44 +601,75 @@ export default function App() {
               VENPURA CC
             </h1>
             <p className="text-xs text-slate-400">
-              Each player should login through their registered first name and mobile number first. Mobile number is mandatory.
+              Enter your squad details below. New players will be registered instantly.
             </p>
           </div>
 
-          {/* Login Form Box */}
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            {errorMsg && (
-              <div className="p-3.5 bg-red-950/40 border border-red-500/20 text-red-300 rounded-xl text-xs flex items-start gap-2 animate-shake">
-                <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
+          {errorMsg && (
+            <div className="p-3.5 bg-red-950/40 border border-red-500/20 text-red-300 rounded-xl text-xs flex items-start gap-2 animate-shake">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
-            <div className="space-y-4 text-left">
+          {/* Unified Player Registration and Signed-In Portal */}
+          <form onSubmit={handlePlayerRegisterAndLogin} className="space-y-4">
+            <div className="space-y-3 text-left">
+              <div className="grid grid-cols-2 gap-35">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-sm">
+                    First Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. Jasprit"
+                    value={playerFirstName}
+                    onChange={(e) => setPlayerFirstName(e.target.value)}
+                    className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-indigo-400 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-sm">
+                    Last Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. Bumrah"
+                    value={playerLastName}
+                    onChange={(e) => setPlayerLastName(e.target.value)}
+                    className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-indigo-400 transition"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                  <CircleUser className="w-3 h-3 text-indigo-400" /> Player First Name <span className="text-red-400">*</span>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-sm">
+                  Player Role
+                </label>
+                <select
+                  value={playerRole}
+                  onChange={(e) => setPlayerRole(e.target.value)}
+                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-indigo-400 transition cursor-pointer"
+                >
+                  <option value="Batsman">Batsman</option>
+                  <option value="Bowler">Bowler</option>
+                  <option value="All-Rounder">All-Rounder</option>
+                  <option value="Wicket-Keeper">Wicket-Keeper</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-sm">
+                  Mobile Number <span className="text-red-400">*</span>
                 </label>
                 <input
                   required
                   type="text"
-                  placeholder="e.g. Jasprit"
-                  value={loginName}
-                  onChange={(e) => setLoginName(e.target.value)}
-                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-indigo-400 transition"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                  <KeyRound className="w-3 h-3 text-indigo-400" /> Registered Mobile Number <span className="text-red-400">*</span>
-                </label>
-                <input
-                  required
-                  type="password"
                   placeholder="e.g. 9000000030"
-                  value={loginMobile}
-                  onChange={(e) => setLoginMobile(e.target.value)}
+                  value={playerMobile}
+                  onChange={(e) => setPlayerMobile(e.target.value)}
                   className="w-full text-xs font-mono bg-slate-950 border border-slate-800 rounded-xl p-3 text-white outline-none focus:border-indigo-400 transition"
                 />
               </div>
@@ -515,19 +679,61 @@ export default function App() {
               type="submit"
               className="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white font-bold text-xs py-3.5 rounded-xl cursor-pointer transition shadow-lg hover:shadow-indigo-500/20 flex items-center justify-center gap-2 border border-indigo-500"
             >
-              <UserCheck className="w-4 h-4" /> Sign In securely
+              <UserCheck className="w-4 h-4" /> Enter Squad Portal
             </button>
           </form>
 
+          {/* Secure Administration Control Center specifically for MANO */}
+          <div className="border-t border-slate-800 pt-5 mt-4 text-left">
+            <div className="flex items-center gap-2 mb-3">
+              <Crown className="w-4 h-4 text-amber-500 animate-pulse animate-duration-1000" />
+              <span className="text-xs font-extrabold text-amber-400 uppercase tracking-widest select-none">Mano Admin Control Gateway</span>
+            </div>
+            
+            <form onSubmit={handleAdminManoSubmit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[9px] font-black text-amber-500/80 uppercase tracking-wider mb-1">Chairman Name</label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="Mano"
+                    value={adminFirstName}
+                    onChange={(e) => setAdminFirstName(e.target.value)}
+                    className="w-full text-xs bg-slate-950 border border-amber-950/40 rounded-xl p-2.5 text-white outline-none focus:border-amber-500 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-amber-500/80 uppercase tracking-wider mb-1">Admin Mobile</label>
+                  <input
+                    required
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={adminMobile}
+                    onChange={(e) => setAdminMobile(e.target.value)}
+                    className="w-full text-xs font-mono bg-slate-950 border border-amber-950/40 rounded-xl p-2.5 text-white outline-none focus:border-amber-500 transition"
+                  />
+                </div>
+              </div>
+              
+              <button
+                type="submit"
+                className="w-full bg-amber-600/10 hover:bg-amber-655 active:scale-98 text-amber-400 hover:text-white font-extrabold text-[11px] py-2.5 rounded-xl cursor-pointer transition border border-amber-500/30 flex items-center justify-center gap-1.5 hover:shadow-lg hover:shadow-amber-500/10"
+              >
+                <Crown className="w-3.5 h-3.5" /> Access Administration (MANO Only)
+              </button>
+            </form>
+          </div>
+
           {/* Quick Demo Directory Helper Toggle */}
-          <div className="border-t border-slate-800/80 pt-4 text-center">
+          <div className="border-t border-slate-800/85 pt-4 text-center">
             <button
               type="button"
               onClick={() => setShowDemoLogins(!showDemoLogins)}
-              className="text-xs text-slate-400 hover:text-indigo-400 font-semibold transition inline-flex items-center gap-1.5"
+              className="text-[11px] text-slate-400 hover:text-indigo-400 font-semibold transition inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Database className="w-3.5 h-3.5" />
-              {showDemoLogins ? "Hide Demo Roster Credentials" : "Reveal Registered Roster Accounts"}
+              {showDemoLogins ? "Hide Registered Squad Members" : "Show Registered Squad Members"}
             </button>
 
             <AnimatePresence>
@@ -538,38 +744,48 @@ export default function App() {
                   exit={{ opacity: 0, height: 0 }}
                   className="mt-4 text-left overflow-hidden bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 max-h-[190px] overflow-y-auto space-y-1.5"
                 >
-                  <p className="text-[10px] font-bold text-indigo-300 uppercase tracking-wide border-b border-slate-800 pb-1">Demo login helper (click to autofill)</p>
+                  <p className="text-[10px] font-bold text-indigo-300 uppercase tracking-wide border-b border-slate-800 pb-1">Signed-up roster directory (Autofill support)</p>
                   
-                  {/* Mano Admin user trigger details */}
+                  {/* Mano Admin block fallback */}
                   <div 
-                    onClick={() => { setLoginName('Mano'); setLoginMobile('9566510045'); }}
-                    className="p-1.5 px-2 text-[11px] rounded bg-amber-950/20 hover:bg-amber-900/30 text-amber-300 border border-amber-900/25 cursor-pointer flex justify-between items-center transition"
+                    onClick={() => { setAdminFirstName('Mano'); setAdminMobile('9566510045'); }}
+                    className="p-1.5 px-2 text-[11px] rounded bg-amber-950/25 hover:bg-amber-900/35 text-amber-300 border border-amber-900/30 cursor-pointer flex justify-between items-center transition"
                   >
-                    <span><strong>Mano (Admin)</strong></span>
+                    <span><strong>Mano (Club Chairman)</strong></span>
                     <span className="font-mono text-[10px] text-white font-bold">9566510045</span>
                   </div>
 
-                  {players.slice(0, 5).map(p => {
-                    if (p.name === 'Mano') return null;
-                    return (
-                      <div 
-                        key={p.id}
-                        onClick={() => { setLoginName(p.name.split(' ')[0]); setLoginMobile(p.mobileNumber || ''); }}
-                        className="p-1.5 px-2 text-[11px] rounded bg-slate-900/40 hover:bg-slate-800/60 text-slate-300 border border-slate-850 cursor-pointer flex justify-between items-center transition"
-                      >
-                        <span className="truncate">{p.name} (Player)</span>
-                        <span className="font-mono text-[10px] text-indigo-350">{p.mobileNumber || '9000000000'}</span>
-                      </div>
-                    );
-                  })}
+                  {players.length === 0 ? (
+                    <p className="text-[10px] text-slate-500 italic p-2 text-center">No other squad players registered yet.</p>
+                  ) : (
+                    players.map(p => {
+                      if (p.name === 'Mano') return null;
+                      return (
+                        <div 
+                          key={p.id}
+                          onClick={() => { 
+                            const parts = p.name.split(' ');
+                            setPlayerFirstName(parts[0] || '');
+                            setPlayerLastName(parts.slice(1).join(' ') || '');
+                            setPlayerRole(p.role || 'Batsman');
+                            setPlayerMobile(p.mobileNumber || '');
+                          }}
+                          className="p-1.5 px-2 text-[11px] rounded bg-slate-900/40 hover:bg-slate-800/60 text-slate-300 border border-slate-850 cursor-pointer flex justify-between items-center transition"
+                        >
+                          <span className="truncate">{p.name} ({p.role || 'Player'})</span>
+                          <span className="font-mono text-[10px] text-indigo-350">{p.mobileNumber || '9000000000'}</span>
+                        </div>
+                      );
+                    })
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </motion.div>
 
-        <p className="text-[10px] text-slate-600 mt-6 max-w-sm text-center font-sans tracking-wide">
-          Offline secure cricket command registry in local environment storage index. Authorized squad members only.
+        <p className="text-[10px] text-slate-650 mt-6 max-w-sm text-center font-sans tracking-wide">
+          Cloud-persisted and real-time synchronized cricket club ledger. Authorized squad members only.
         </p>
       </div>
     );
@@ -917,7 +1133,7 @@ export default function App() {
             <TournamentsTab
               players={players}
               tournaments={tournaments}
-              onUpdateTournaments={setTournaments}
+              onUpdateTournaments={handleUpdateTournaments}
               isAdmin={isAdmin}
             />
           )}

@@ -1,0 +1,106 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "Registered cricket group crew members and their roles",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "jerseyNumber": { "type": "string" },
+        "role": { "type": "string" },
+        "totalCollected": { "type": "number" },
+        "mobileNumber": { "type": "string" }
+      },
+      "required": ["id", "name", "totalCollected", "mobileNumber"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Purchases and match outlays paid by players or the collective pot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productName": { "type": "string" },
+        "cost": { "type": "number" },
+        "date": { "type": "string" },
+        "category": { "type": "string" },
+        "purchasedBy": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "productName", "cost", "date", "category", "purchasedBy"]
+    },
+    "PaymentLog": {
+      "title": "PaymentLog",
+      "description": "Contribution history for registered match/season fee entries",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "playerId": { "type": "string" },
+        "playerName": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "playerId", "playerName", "amount", "date"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Schedule of fixture matches with live RSVPs and optional scorecards",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "opponent": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "venue": { "type": "string" },
+        "format": { "type": "string" },
+        "notes": { "type": "string" },
+        "poll": { "type": "object" },
+        "scorecard": { "type": "object" }
+      },
+      "required": ["id", "opponent", "date", "time", "venue", "format", "poll"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "League seasons and player collection tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "venue": { "type": "string" },
+        "format": { "type": "string" },
+        "entryFeePerPlayer": { "type": "number" },
+        "totalTeamEntryFee": { "type": "number" },
+        "posterUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "organizerContact": { "type": "string" },
+        "playerPayments": { "type": "array" }
+      },
+      "required": ["id", "name", "startDate", "endDate", "venue", "format", "entryFeePerPlayer", "playerPayments"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": "Player",
+      "description": "Registered club members index where mobile corresponds to password"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Record of club financial outgoings"
+    },
+    "/payment_logs/{logId}": {
+      "schema": "PaymentLog",
+      "description": "Payments made towards squad balance and member contributions"
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Matches and attendance logs"
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Multi-team leagues and member fee status"
+    }
+  }
+}
