@@ -1,0 +1,6 @@
+{
+  "name": "VENPURA Cricket Club",
+  "description": "A comprehensive dashboard for cricket teams to track player fee collections, purchasing expenses, remaining balance, and poll player match availability.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
