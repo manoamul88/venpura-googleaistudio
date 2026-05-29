@@ -37,7 +37,10 @@ import {
   ChevronRight,
   Info,
   Database,
-  UserPlus
+  UserPlus,
+  Smartphone,
+  Apple,
+  Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -77,8 +80,8 @@ export default function App() {
   const [playerMobile, setPlayerMobile] = useState('');
 
   // SECURE CHAIRMAN (MANO) ADMIN ENTRANCE STATES
-  const [adminFirstName, setAdminFirstName] = useState('Mano');
-  const [adminMobile, setAdminMobile] = useState('');
+  const [adminUsername, setAdminUsername] = useState('Mano');
+  const [adminPassword, setAdminPassword] = useState('');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [showDemoLogins, setShowDemoLogins] = useState(false);
@@ -86,6 +89,17 @@ export default function App() {
   // Database System sharing console states
   const [dbShareInput, setDbShareInput] = useState('');
   const [dbStatus, setDbStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+  // Mobile App and PWA share & installation states
+  const [isMobileInstallModalOpen, setIsMobileInstallModalOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleCopyInviteLink = () => {
+    const inviteText = `🏏 *VENPURA Cricket Club Portal* 🏏\nHi Boys! Connect to our official squad portal to sign up, log match availability, and keep track of our team balance and fee collections:\n👉 ${window.location.href}\n\n📲 *How to use as a mobile app*:\n- *Android (Chrome)*: Tap 3-dots top-right -> "Add to Home screen" or "Install App".\n- *iOS (Safari)*: Tap the "Share" icon at the bottom -> "Add to Home Screen".`;
+    navigator.clipboard.writeText(inviteText);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 3000);
+  };
 
   // Active Navigation Tab
   const [activeTab, setActiveTab2] = useState<'FINANCES' | 'MATCHES' | 'ROSTER' | 'SCOREBOARD' | 'TOURNAMENTS'>('FINANCES');
@@ -412,15 +426,15 @@ export default function App() {
     e.preventDefault();
     setErrorMsg('');
 
-    const cleanInputName = adminFirstName.trim().toLowerCase();
-    const cleanInputMobile = adminMobile.replace(/\s+/g, '').trim();
+    const cleanInputName = adminUsername.trim().toLowerCase();
+    const cleanInputPassword = adminPassword.trim();
 
-    if (!cleanInputName || !cleanInputMobile) {
-      setErrorMsg('Both Admin First Name and mobile number are required!');
+    if (!cleanInputName || !cleanInputPassword) {
+      setErrorMsg('Both Admin Login name and password are required!');
       return;
     }
 
-    if (cleanInputName === 'mano' && cleanInputMobile === '9566510045') {
+    if (cleanInputName === 'mano' && (cleanInputPassword === '9566510045' || cleanInputPassword.toLowerCase() === 'password')) {
       const manoAdmin: Player = {
         id: 'p0',
         name: 'Mano',
@@ -436,13 +450,13 @@ export default function App() {
         }
         setCurrentUser(manoAdmin);
         localStorage.setItem('cricket_logged_user', JSON.stringify(manoAdmin));
-        setAdminFirstName('Mano');
-        setAdminMobile('');
+        setAdminUsername('Mano');
+        setAdminPassword('');
       } catch (err: any) {
         setErrorMsg(`Admin authorization failed: ${err.message || err}`);
       }
     } else {
-      setErrorMsg('Invalid Admin Access! This panel is restricted strictly for Mano only.');
+      setErrorMsg('Invalid Admin Credentials! This panel is restricted strictly for Mano only.');
     }
   };
 
@@ -600,9 +614,30 @@ export default function App() {
             <h1 className="text-3xl font-display font-black tracking-tight text-white uppercase mt-1">
               VENPURA CC
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 mb-2">
               Enter your squad details below. New players will be registered instantly.
             </p>
+
+            {/* Mobile App PWA Shortcut Promotion */}
+            <button
+              type="button"
+              onClick={() => setIsMobileInstallModalOpen(true)}
+              className="w-full bg-slate-950/50 hover:bg-slate-950 text-slate-300 border border-slate-800/80 rounded-2xl p-3.5 flex items-center justify-between text-xs transition cursor-pointer select-none group/btn mb-1"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl group-hover/btn:bg-indigo-600 group-hover/btn:text-white transition">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div className="text-left font-sans">
+                  <p className="font-bold text-slate-200 group-hover/btn:text-white transition">Android & iOS Mobile App</p>
+                  <p className="text-[10px] text-slate-500">How to share & save on home screen</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-indigo-400 font-bold bg-indigo-505/5 p-1 px-2.5 rounded-lg border border-indigo-500/15">
+                <span>View Link</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
+            </button>
           </div>
 
           {errorMsg && (
@@ -693,24 +728,24 @@ export default function App() {
             <form onSubmit={handleAdminManoSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[9px] font-black text-amber-500/80 uppercase tracking-wider mb-1">Chairman Name</label>
+                  <label className="block text-[9px] font-black text-amber-500/80 uppercase tracking-wider mb-1">Admin Login</label>
                   <input
                     required
                     type="text"
                     placeholder="Mano"
-                    value={adminFirstName}
-                    onChange={(e) => setAdminFirstName(e.target.value)}
+                    value={adminUsername}
+                    onChange={(e) => setAdminUsername(e.target.value)}
                     className="w-full text-xs bg-slate-950 border border-amber-950/40 rounded-xl p-2.5 text-white outline-none focus:border-amber-500 transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black text-amber-500/80 uppercase tracking-wider mb-1">Admin Mobile</label>
+                  <label className="block text-[9px] font-black text-amber-500/80 uppercase tracking-wider mb-1">Admin Password</label>
                   <input
                     required
                     type="password"
                     placeholder="••••••••••••"
-                    value={adminMobile}
-                    onChange={(e) => setAdminMobile(e.target.value)}
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
                     className="w-full text-xs font-mono bg-slate-950 border border-amber-950/40 rounded-xl p-2.5 text-white outline-none focus:border-amber-500 transition"
                   />
                 </div>
@@ -748,11 +783,11 @@ export default function App() {
                   
                   {/* Mano Admin block fallback */}
                   <div 
-                    onClick={() => { setAdminFirstName('Mano'); setAdminMobile('9566510045'); }}
+                    onClick={() => { setAdminUsername('Mano'); setAdminPassword('9566510045'); }}
                     className="p-1.5 px-2 text-[11px] rounded bg-amber-950/25 hover:bg-amber-900/35 text-amber-300 border border-amber-900/30 cursor-pointer flex justify-between items-center transition"
                   >
                     <span><strong>Mano (Club Chairman)</strong></span>
-                    <span className="font-mono text-[10px] text-white font-bold">9566510045</span>
+                    <span className="font-mono text-[10px] text-white font-semibold">password/mobile</span>
                   </div>
 
                   {players.length === 0 ? (
@@ -814,6 +849,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button 
+              onClick={() => setIsMobileInstallModalOpen(true)}
+              className="bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 text-[10px] font-black px-2.5 py-1.5 rounded-lg cursor-pointer transition flex items-center gap-1 bg-emerald-950/20 border border-emerald-500/20 tracking-wider uppercase"
+            >
+              <Smartphone className="w-3 h-3 text-emerald-400 shrink-0" /> Share / Install App Link
+            </button>
+
+            <span className="text-slate-800">|</span>
+
             <button 
               onClick={() => {
                 localStorage.removeItem('cricket_logged_user');
@@ -1224,6 +1268,134 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* MOBILE APPLICATION SHARING & INSTALLATION HANDBOOK CONTROL */}
+      <AnimatePresence>
+        {isMobileInstallModalOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-150 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="p-5 border-b border-slate-800 bg-slate-950 flex justify-between items-center select-none">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-5 h-5 text-indigo-400 animate-pulse" />
+                  <span className="font-display font-black text-xs uppercase tracking-widest text-slate-200">Android & iOS App Installation Guide</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileInstallModalOpen(false)}
+                  className="p-1 px-2.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-bold cursor-pointer transition"
+                >
+                  Close
+                </button>
+              </div>
+
+              {/* Scrollable instructions panel */}
+              <div className="p-6 space-y-6 overflow-y-auto text-left font-sans text-xs">
+                
+                {/* Instant Scan and Share invite */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-center bg-slate-950 p-4 rounded-2xl border border-slate-850">
+                  <div className="text-center md:text-left space-y-2">
+                    <h3 className="font-bold text-sm text-white">📲 Quick Mobile Link</h3>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Point any phone's camera at this code to load Venpura Sports Ledger immediately on mobile browser!
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyInviteLink}
+                        className={`w-full py-2.5 px-3 rounded-xl font-bold transition flex items-center justify-center gap-2 select-none cursor-pointer ${
+                          copiedLink 
+                            ? 'bg-emerald-600 text-white shadow' 
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-indigo-505/20'
+                        }`}
+                      >
+                        <Share2 className="w-4 h-4" />
+                        {copiedLink ? "✓ Copied WhatsApp invite!" : "Copy WhatsApp invite link"}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    {/* Live QR helper API */}
+                    <div className="bg-white p-2.5 rounded-2xl w-fit mx-auto shadow-inner flex flex-col items-center">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=130x130&color=090d16&data=${encodeURIComponent(window.location.href)}`} 
+                        alt="VENPURA CC Mobile QR Link"
+                        className="w-[120px] h-[120px] block select-none"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="text-[9px] text-[#090d16] font-extrabold tracking-wider font-mono mt-1 select-none">SCAN WITH YOUR PHONE</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* iOS / Safari column */}
+                  <div className="p-4 bg-slate-950/40 border border-slate-850 rounded-2xl space-y-3">
+                    <div className="flex items-center gap-1.5 border-b border-slate-850 pb-2">
+                      <Apple className="w-4 h-4 text-slate-300" />
+                      <span className="font-bold text-slate-200">Apple iPhone (iOS) App Link</span>
+                    </div>
+                    <ul className="space-y-2.5 text-slate-400 text-[11px] list-none pl-0 leading-relaxed">
+                      <li className="flex gap-2">
+                        <span className="text-indigo-400 font-bold font-mono">1.</span>
+                        <span>Open our dashboard URL inside <strong>Safari Browser</strong> on your iPhone.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-indigo-400 font-bold font-mono">2.</span>
+                        <span>Tap the <strong>Share</strong> button (the square icon with upward arrow) at the screen bottom.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-indigo-400 font-bold font-mono">3.</span>
+                        <span>Scroll down and select <strong>"Add to Home Screen"</strong> from the options.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-indigo-400 font-bold font-mono">4.</span>
+                        <span>Set name as <strong>"Venpura CC"</strong> and tap <strong>Add</strong> in top-right. The mobile app icon will appear on your phone home screen!</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Android / Chrome column */}
+                  <div className="p-4 bg-slate-950/40 border border-slate-850 rounded-2xl space-y-3">
+                    <div className="flex items-center gap-1.5 border-b border-slate-850 pb-2">
+                      <Smartphone className="w-4 h-4 text-emerald-400" />
+                      <span className="font-bold text-slate-200">Android (Google Chrome) App Link</span>
+                    </div>
+                    <ul className="space-y-2.5 text-slate-400 text-[11px] list-none pl-0 leading-relaxed">
+                      <li className="flex gap-2">
+                        <span className="text-emerald-400 font-bold font-mono">1.</span>
+                        <span>Open our dashboard link inside <strong>Google Chrome browser</strong> on your phone.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-emerald-400 font-bold font-mono">2.</span>
+                        <span>Tap the <strong>three-dot menu button</strong> in Chrome's top right corner.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-emerald-400 font-bold font-mono">3.</span>
+                        <span>Select the option called <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong>.</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="text-emerald-400 font-bold font-mono">4.</span>
+                        <span>Accept the system prompt to add/install. Tap <strong>Install</strong> to get the launcher on your phone, ready for quick squad log-ins!</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-500 text-center select-none pt-2">
+                  🛡️ This installation delivers a clean progressive web experience. Fits Android and iOS screens perfectly.
+                </div>
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
